@@ -1,0 +1,359 @@
+ActiveRecord
+
+1. Забудьте об sql, сосредоточтесь на логике
+2. ActiveRecord::Relation – очень ленивые запросы
+3. Проверка данных
+4. Связи между несколькими моделями
+5. пара слов о хуках
+6. Чем модель не должна быть
+
+
+1.
+ Ar является очень мощным средством для сохранения данных в релияционных бд, абстрагируюсь от ее особенностей.
+Для создание новой модели вам необходимо задать ее схему в формате данных Ruby, а не используемой базы данных, запустить миграцию для создания таблицы в бд и добавить класс, наследуемый от AR::Base. Все остальное сделает за вас AR.
+
+Создаем первую запись
+Модель уже имеет набор getter/setter методов с именем столбцов
+
+advert = Advert.new
+advert.headline = "New Gold Sunglasses"
+advert.description = "This is a NEW pair of authentic Chloe 79S gold frame sunglasses with purple/bordeaux fade gradient lenses."
+advert.active = true
+advert.save
+
+=> Insert into adverts (headline, description, active, ...)
+
+#ничего не изменили
+
+advert.save
+
+=> нечего и записывать
+
+Однако императивный стиль указания параметров слишком избыточен и многосимвольный, поэтому сущесвует более декларативный вид
+
+комбинация new + save
+advert = Advert.new(:headline => '...', :description => '...', :active => true)
+​# дополнительные вычисления
+t.save
+
+
+Advert.create(:headline => '...', :description => '...', :active => true)
+
+В дополнение к этим методам есть !методы – выполняют тоже самое, но с вызовом exception при неудачи
+
+# существующие записи
+
+advert = Advert.find(1)  #извлечение записи с id=1
+advert.headline = “Fantasy”
+advert.save
+
+=> Update adverts SET headline = "Fantasy" WHERE id = 1
+
+advert.update_attributes(:headline => 'Fantasy')
+
+advert.update_column(:headline, 'Fantasy')
+
+
+Преобразование данных на лету
+
+advert.price_in_cents = “3500”
+advert.price_in_cents
+=> 3500
+
+t.active = "0"
+t.active
+=> false
+
+? методы на проверку существования данных
+
+advert = Advert.new
+advert.headline?
+=> false
+advert.headline = “Fantasy”
+advert.headline?
+=> true
+
+2.
+ActiveRecord Relation – lazy-loading коллекция, с кешированием и повадками обычного массива
+
+Advert.where(:headline => 'Red Dragon') #возвращает AR relation, где поле headline='Red Dragon')
+Advert.where(:price_in_cents => 11..20) # weight BETWEEN 11 AND 20
+Advert.where(:price_in_cents => [20, 25, 40]) # weight in (20, 25, 40)
+
+Комбинируем запросы
+
+Advert.where(:headline => 'Libretto').where(:active => true)
+or
+Advert.where(:headline => 'Libretto', :active => true)
+
+=> model='Libretto' and active=1
+
+Сортировка данных
+
+Advert.order(:name) # ORDER BY name
+Advert.order("price_in_cents DESC") #ORDER BY price_in_cents DESC
+
+Выборка нескольких полей
+Advert.select("model, price_in_cents")
+
+Группирование
+Advert.group(:headline)
+
+Но более сложные трюки требуют использования фрагментов sql с большим бонусом в виде защиты от sql injection
+Advert.where("headline = ? OR price_in_cents = ?”, “Libretto”, 30)
+
+list = Advert.where(:headline => 'Libretto')
+list = list.where(:price_in_cents => 20)
+list.size #выполняет запрос SELECT Count(DISTINCT id)...
+
+Scopes – как атомарные фильтры
+
+scope :light, where("price_in_cents < ?", 3500)
+scope :active, where(:active => true)
+scope light_active, light.active
+scope :by_model, lambda { |value| where(:headline => value) }
+
+
+3. Activerecord предоставляет мощную и губкую систему валидации данных
+
+Когда важно чтобы данные были
+
+validates_presence_of :headline, :weight
+validates :headline, :price_in_cents, :presence => true
+
+А что означает это аморфный presence - это !blank?. Осталось разобрать что такое blank?
+Итак,
+Для строк    - "", “     “,  “  \n \r”
+Для массивов - []
+Для hash     - {}
+а также false & nil
+
+Все остальное -  presence
+
+
+!!! С программисты
+
+0.blank?
+=> false
+
+Более специфические проверки
+
+validates_length_of :headline, :minimum => 3
+validates_length_of :headline, :maximum => 80
+validates_length_of :headline, :in => 3..80
+validates_length_of :headline, :is => 40
+
+Числа
+
+validates :price_in_cents, :numericality => { :greater_than => 0 }
+validates :price_in_cents, :numericality => { :less_than => 10000 }
+validates :price_in_cents, :numericality => { :greater_than_or_equal => 0 }
+validates :price_in_cents, :numericality => { :less_than_or_equal => 5000 }
+
+Вхождения
+
+validates :price_in_cents, :inclusion => { :in => [200, 500, 1000] }
+validates_exclusion_of :headline, :in => ['Libretto', 'Fantasy']
+
+Уникальность
+
+validates :headline, :uniqueness => true
+!!!Делает запрос к базе данных
+
+Ваша собственная валидация
+
+validate :is_price_real
+
+....
+
+def is_price_real
+  if price.present?
+    errors.add(:price_in_cents, "less zero") if price_in_cents < 0
+  end
+end
+
+
+Однако применять валидацию можно выборочно
+
+validate :is_price_real, :if => :weight?
+Сперва вызвает метод weight? и если true выполняет проверку
+
+4.
+
+Существует 3 типа связей – один к одному, один к многим и многие к многим.
+
+Один к одному
+
+class History < ActiveRecord::Base
+  belongs_to :advert
+end
+
+class Advert < Activerecord::Base
+  has_one :history
+end
+
+у master появляется несколько методов для создания slave
+
+build_history(args_hash....)
+create_history(args_hash...)
+
+несколько полезных параметров для настройки связи
+
+:dependent -> :destroy
+              :delete
+              :nullify
+
+:class_name = нестандартный класс
+:foreign_key => нестандартный ключ
+
+
+Один к многим
+
+похожая концепция на предыдущий тип
+
+class User < Activerecord::Base
+  has_many :adverts, :dependent => :destroy
+end
+
+class Advert < ActiveRecord::Base
+  belongs_to :user
+end
+
+master получает такие методы
+
+user.adverts.build(args_hash) – инициализация нового объекта
+user.adverts.create(args_hash)  - создание нового объекта
+user.adverts << advert # ассоция объекта и сохранение состояния в бд
+user.advert_ids – список id связанных моделей
+
+Особенности отношение master & slave
+При сохранении master проверяет все slave объекты. Если все объекты прошли проверку на формат данных сохраняет себя и связанные данные. Если что-то не так со связанным объектом – прерывает процесс.
+
+Slave при сохранении не учитывает состояние master и не сохраняет его
+
+Многие к многим
+
+Два пути
+
+Легковесный
+
+Создается промежуточная таблица
+
+create_table :adverts_categories, :id => false do |t|
+  t.integer :advert_id
+  t.integer :category_id
+end
+
+add_index :adverts_categories, :advert_id
+add_index :adverts_categories, :category_id
+
+class Advert < Activerecord::Base
+  has_and_belongs_to_many :categories
+end
+
+class Category <Activerecord::Base
+  has_and_belongs_to_many :adverts
+end
+
+Сложный путь
+
+class Advert < Activerecord::Base
+  has_many :likes, :dependent => :delete_all
+  has_many :fans, :through => :likes
+end
+
+class User < Activerecord::Base
+  has_many :likes, :foreign_key => :fan_id, :dependent => :delete_all
+  has_many :favorite_adverts, :through => :likes, :source => :advert
+end
+
+class Like < Activerecord::Base
+  belongs_to :fan, :class_name => 'User'
+  belongs_to :advert
+end
+
+5.
+Такие события как initialization, validation, creation, update & destroy позволяют добавлять хуки. Основное их назначение ->
+
+задание значений по-умолчанию
+логирование и уведомление
+создание связанных моделей
+
+Их типы ->
+
+ before_
+ around_
+ after_
+
+Например
+
+before_validation :set_defaults
+
+def set_defaults
+  self.weight ||= 350
+  self.model ||= Libretto
+end
+
+Также хуки могут быть специфичны для конкретного состояния модели.
+Если она не сохранена в Бд
+
+after_validation :do_something, :on => :create
+
+Однако их избегать потому что:
+
+Они будут применяться при создании всех записей
+before_save :method_with_false_result #отменяет сохранение
+update_column :column_name, value #игнорирует все хуки, как и валидацию
+хуки усложняют процесс тестирования и порой прячут бизнес логику
+
+
+before_create :add_history
+
+
+def add_history
+  build_history
+end
+
+--- or ---
+
+def create_with_history(args)
+  build_history
+            create(args)
+end
+
+
+6.
+Прежде всего стоит помнить, что основное предназначение модели – сохранение и извлечение данных из хранилища.
+
+Поэтому:
+
+1. модель не должна создавать части view
+
+​# явный пример
+def badge
+  if active?
+   '<span class=”badge active”>Active</span>'
+  else
+   '<span class=”badge archive”>In Archive</span>'
+end
+
+# неявный пример
+def description_preview
+   description[0..40]
+end
+
+Быть перенасыщенной бизнес логикой
+
+Если у вас есть несколько групп методов необходимых для конкретных случаев, стоит подумать об отдельных модулях/классах для этих нужд
+
+class Advert < Activerecord::Base
+  def self.notify_about_new_adverts
+    #выбирает пользователей подписавшихся на рассылку
+    #фильтрует по необходимым категориям
+    #проверяет подтвержден ли email пользователя
+  end
+
+  def self.popularity_table
+    #строит таблицу популярности объявлений
+  end
+end
