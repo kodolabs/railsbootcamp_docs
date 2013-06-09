@@ -1,0 +1,67 @@
+Смоделируем сушности и связи между ними
+
+Prime model - это офис. Офис добавляется на сайт офис менеджером. Все офисы разбиты по городам
+Из этого выходит следующая схема
+
+Менеджер относится к офису связью один к одному.
+Город относится от офису как один к многим.
+Следовательно офис будет хранить два внешних ключа manager_id и city_id
+
+Создадим модели
+rails g model manager email password_digest
+rake db:migrate
+
+rails g model city name
+rake db:migrate
+
+rails g model office capacity:integer address city_id:integer:index  manager:association:index
+rake db:migrate
+
+И тут мы вспоминаем, что неплохо добавить еще и телефон к офису
+
+rails g migration add_phone_field
+Открываем миграцию и пишем код[рассказываем про up & down]
+
+  def up
+    add_column :offices, :phone, :string
+  end
+
+  def down
+    remove_column :offices, :phone
+  end
+
+Запускаем миграцию и
+
+[стоит последнюю миграцию отменить и создать ее аналог с использованием магии]
+
+rake db:rollback
+rails d migration add_phone_field
+
+rails g migration add_phone_field_to_office phone
+[не открываем созданый файл миграции и сразу переходим следующей команде]
+rake db:migrate
+Но всеже стоит посмотреть файл миграции [обзор чейндж и расскрытие магии]
+
+Стоит заглянуть в файл db/schema.rb. Это карта нашей базы данных [кратко об назначении]
+
+[
+  переходим к моделям
+  рассматриваем как устроены модели,
+  зачем нужен attr_accessible
+  описываем миграции
+]
+
+[
+  в менеджере добавляем has_secure_password,
+  не забываем про ruby-bcrypt
+]
+
+Стоит создать пару записей и познакомится с консолью
+rails с
+
+[
+  стоит попробывать
+  .new, #save, .create, #update_attributes,
+  #update_column, .find, .find_by_**(но так как они deprecated особо не утруждаться)
+  .where, .first, .last, .order, .all
+]

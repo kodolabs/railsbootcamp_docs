@@ -1,0 +1,52 @@
+Для создания первых страниц rails предоставляет удобный генератор
+
+[!
+  генератор будет падать с ошибкой, что отсутствует база данных.
+  Можно заранее создать бд
+]
+
+необходимо создать базу данны
+rake db:create
+
+rails g controller home index about
+
+Где home - имя контроллера, а index и about его actions.
+
+наблюдательные слушатели могла заметить, что генератор вывел в лог больше действий нежели создание 2 страниц
+
+"
+create  app/controllers/home_controller.rb
+ route  get "home/about"
+ route  get "home/index"
+invoke  erb
+create    app/views/home
+create    app/views/home/index.html.erb
+create    app/views/home/about.html.erb
+invoke  helper
+create    app/helpers/home_helper.rb
+invoke  assets
+invoke    coffee
+create      app/assets/javascripts/home.js.coffee
+invoke    scss
+create      app/assets/stylesheets/home.css.scss
+"
+
+Давайте пробежимся по шагам [Рассматриваем все шаги ничего не меняя в коде]
+...
+
+
+Запустим сервер [можно пошутить про денвер и iss - которые нужно ставить, конфигурировать и тп,
+а веббрик уже из коробки готов - запускай и работай]
+
+rails s
+
+
+Откроем на /home/index, /home/about
+
+"
+Home#about
+
+Find me in app/views/home/about.html.erb
+"
+
+Откроем страницу и поправим ее содержание [!набросал небольшой текст]
